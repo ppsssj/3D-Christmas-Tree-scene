@@ -9,6 +9,10 @@ import {
 import * as THREE from "three";
 import "./ChristmasTree3D.css";
 
+/* =========================
+   Config
+========================= */
+
 const THEMES = [
   { key: "minimal", label: "미니멀" },
   { key: "lux", label: "화려함" },
@@ -29,7 +33,7 @@ const THEME_TOKENS = {
     spark: "#ffffff",
     palette: ["#ffffff", "#ffe49a", "#d7e3ff"],
     sway: { ax: 0.018, ay: 0.028, speed: 0.55 },
-    fog: { color: "#0b1020", near: 12, far: 44 },
+    fog: { color: "#0b1020", near: 14, far: 52 },
     env: "warehouse",
   },
   lux: {
@@ -44,7 +48,7 @@ const THEME_TOKENS = {
     spark: "#ffd57c",
     palette: ["#ff4d4d", "#ffd57c", "#48d18d", "#ffffff"],
     sway: { ax: 0.03, ay: 0.045, speed: 0.75 },
-    fog: { color: "#070a13", near: 5, far: 16 },
+    fog: { color: "#070a13", near: 14, far: 50 },
     env: "city",
   },
   snow: {
@@ -59,7 +63,7 @@ const THEME_TOKENS = {
     spark: "#dcf6ff",
     palette: ["#dcf6ff", "#bfe4ff", "#ffffff"],
     sway: { ax: 0.022, ay: 0.03, speed: 0.6 },
-    fog: { color: "#0a1225", near: 6, far: 20 },
+    fog: { color: "#0a1225", near: 14, far: 56 },
     env: "park",
   },
   neon: {
@@ -74,41 +78,46 @@ const THEME_TOKENS = {
     spark: "#00ffb4",
     palette: ["#00ffb4", "#ff46ff", "#7a4dff", "#ffffff"],
     sway: { ax: 0.028, ay: 0.055, speed: 0.95 },
-    fog: { color: "#05050a", near: 5, far: 15 },
+    fog: { color: "#05050a", near: 14, far: 48 },
     env: "night",
   },
 };
 
+// 더 멀리 + y 낮춰서 아래에서 올려다보는 구도
 const CAMERA_PRESETS = {
   minimal: {
-    pos: [0.0, 1.15, 7.2],
-    target: [0, 1.2, 0],
+    pos: [0.0, 1.15, 7.6],
+    target: [0, 1.25, 0],
     fov: 42,
     autoRotate: false,
-    autoRotateSpeed: 0.7,
+    autoRotateSpeed: 0.75,
   },
   lux: {
-    pos: [4.9, 1.05, 5.7],
-    target: [0, 1.25, 0],
+    pos: [5.2, 1.0, 6.1],
+    target: [0, 1.3, 0],
     fov: 44,
     autoRotate: true,
     autoRotateSpeed: 1.05,
   },
   snow: {
-    pos: [3.7, 1.25, 6.9],
-    target: [0, 1.3, 0],
+    pos: [3.9, 1.25, 7.3],
+    target: [0, 1.35, 0],
     fov: 42,
     autoRotate: true,
-    autoRotateSpeed: 0.8,
+    autoRotateSpeed: 0.85,
   },
   neon: {
-    pos: [-5.2, 1.0, 6.3],
-    target: [0, 1.2, 0],
+    pos: [-5.5, 0.95, 6.6],
+    target: [0, 1.25, 0],
     fov: 46,
     autoRotate: true,
     autoRotateSpeed: 1.25,
   },
 };
+
+/* =========================
+   Utilities
+========================= */
 
 function mulberry32(seed) {
   let t = seed >>> 0;
@@ -119,6 +128,15 @@ function mulberry32(seed) {
     return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+function smoothstep(edge0, edge1, x) {
+  const t = THREE.MathUtils.clamp((x - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+/* =========================
+   Ornaments
+========================= */
 
 function buildOrnaments(seed, count, palette) {
   const rnd = mulberry32(seed);
@@ -140,6 +158,10 @@ function buildOrnaments(seed, count, palette) {
   return items;
 }
 
+/* =========================
+   Lights (Neon chase)
+========================= */
+
 function ChaseLights({ themeKey, tokens, count = 44 }) {
   const matsRef = useRef([]);
   const pos = useMemo(() => {
@@ -147,8 +169,8 @@ function ChaseLights({ themeKey, tokens, count = 44 }) {
     for (let i = 0; i < count; i++) {
       const u = i / count;
       const y = 0.35 + u * 1.65;
-      const t = THREE.MathUtils.clamp((y - 0.35) / 1.65, 0, 1);
-      const radius = (1 - t) * 0.22 + t * 0.82;
+      const tt = THREE.MathUtils.clamp((y - 0.35) / 1.65, 0, 1);
+      const radius = (1 - tt) * 0.22 + tt * 0.82;
 
       const angle = u * Math.PI * 8.0;
       const x = Math.cos(angle) * radius;
@@ -219,80 +241,9 @@ function ChaseLights({ themeKey, tokens, count = 44 }) {
   );
 }
 
-function Presents({ themeKey }) {
-  const groupRef = useRef(null);
-
-  const items = useMemo(() => {
-    const base = [
-      { p: [0.95, -0.42, 0.25], s: [0.28, 0.18, 0.28] },
-      { p: [-0.85, -0.45, -0.2], s: [0.22, 0.16, 0.22] },
-      { p: [0.35, -0.48, -0.75], s: [0.26, 0.14, 0.26] },
-      { p: [-0.2, -0.46, 0.8], s: [0.2, 0.2, 0.2] },
-    ];
-    return base;
-  }, []);
-
-  const palette = useMemo(() => {
-    if (themeKey === "neon") return ["#00ffb4", "#ff46ff", "#7a4dff"];
-    if (themeKey === "snow") return ["#dcf6ff", "#bfe4ff", "#ffffff"];
-    if (themeKey === "lux") return ["#ff4d4d", "#ffd57c", "#48d18d"];
-    return ["#ffffff", "#ffe49a", "#d7e3ff"];
-  }, [themeKey]);
-
-  useFrame(({ clock }) => {
-    const g = groupRef.current;
-    if (!g) return;
-    const t = clock.getElapsedTime();
-    g.position.y = Math.sin(t * 0.8) * 0.01;
-    g.rotation.y = Math.sin(t * 0.35) * 0.06;
-  });
-
-  return (
-    <group ref={groupRef}>
-      {items.map((it, idx) => {
-        const c = palette[idx % palette.length];
-        const ribbon = palette[(idx + 1) % palette.length];
-        return (
-          <group key={idx} position={it.p}>
-            <mesh>
-              <boxGeometry args={it.s} />
-              <meshStandardMaterial
-                color={c}
-                roughness={0.35}
-                metalness={0.22}
-              />
-            </mesh>
-
-            <mesh position={[0, it.s[1] * 0.05, 0]}>
-              <boxGeometry
-                args={[it.s[0] * 1.02, it.s[1] * 0.18, it.s[2] * 0.18]}
-              />
-              <meshStandardMaterial
-                color={ribbon}
-                roughness={0.2}
-                metalness={0.35}
-                emissive={ribbon}
-                emissiveIntensity={themeKey === "neon" ? 0.55 : 0.15}
-              />
-            </mesh>
-            <mesh position={[0, it.s[1] * 0.05, 0]}>
-              <boxGeometry
-                args={[it.s[0] * 0.18, it.s[1] * 0.18, it.s[2] * 1.02]}
-              />
-              <meshStandardMaterial
-                color={ribbon}
-                roughness={0.2}
-                metalness={0.35}
-                emissive={ribbon}
-                emissiveIntensity={themeKey === "neon" ? 0.55 : 0.15}
-              />
-            </mesh>
-          </group>
-        );
-      })}
-    </group>
-  );
-}
+/* =========================
+   Snowfall (instanced)
+========================= */
 
 function Snowfall({ enabled, count = 900 }) {
   const meshRef = useRef(null);
@@ -301,11 +252,11 @@ function Snowfall({ enabled, count = 900 }) {
     const arr = [];
     for (let i = 0; i < count; i++) {
       arr.push({
-        x: (rnd() * 2 - 1) * 5.5,
-        y: rnd() * 6.5 + 0.2,
-        z: (rnd() * 2 - 1) * 5.5,
-        v: 0.35 + rnd() * 0.85,
-        s: 0.006 + rnd() * 0.012,
+        x: (rnd() * 2 - 1) * 6.0,
+        y: rnd() * 7.0 + 0.2,
+        z: (rnd() * 2 - 1) * 6.0,
+        v: 0.35 + rnd() * 0.95,
+        s: 0.006 + rnd() * 0.013,
       });
     }
     return arr;
@@ -320,7 +271,7 @@ function Snowfall({ enabled, count = 900 }) {
     for (let i = 0; i < data.length; i++) {
       const d = data[i];
       d.y -= d.v * dt;
-      if (d.y < -0.2) d.y = 6.5;
+      if (d.y < -0.25) d.y = 7.0;
 
       dummy.position.set(d.x, d.y, d.z);
       dummy.scale.setScalar(d.s);
@@ -345,6 +296,316 @@ function Snowfall({ enabled, count = 900 }) {
     </instancedMesh>
   );
 }
+
+/* =========================
+   Burst particles (gift event)
+========================= */
+
+function BurstParticles({ tokens, themeKey, controllerRef, count = 96 }) {
+  const meshRef = useRef(null);
+  const particlesRef = useRef([]);
+  const originRef = useRef(new THREE.Vector3());
+  const colorRef = useRef(new THREE.Color(tokens.spark));
+
+  useEffect(() => {
+    colorRef.current = new THREE.Color(tokens.spark);
+  }, [tokens.spark]);
+
+  useEffect(() => {
+    // expose fire() to parent via controllerRef
+    if (!controllerRef) return;
+    controllerRef.current = {
+      fire: (origin, colorHex) => {
+        originRef.current.copy(origin);
+        if (colorHex) colorRef.current = new THREE.Color(colorHex);
+        const rnd = mulberry32(Math.floor(Math.random() * 1e9));
+        const p = particlesRef.current;
+
+        for (let i = 0; i < p.length; i++) {
+          const dir = new THREE.Vector3(
+            rnd() * 2 - 1,
+            rnd() * 1.3 + 0.2,
+            rnd() * 2 - 1
+          ).normalize();
+          const sp = 1.6 + rnd() * 2.2;
+          p[i].pos.copy(originRef.current);
+          p[i].vel.copy(dir.multiplyScalar(sp));
+          p[i].life = 0.9 + rnd() * 0.7; // seconds
+          p[i].maxLife = p[i].life;
+          p[i].size = 0.02 + rnd() * 0.02;
+        }
+      },
+    };
+  }, [controllerRef]);
+
+  useEffect(() => {
+    // init particle slots
+    const arr = [];
+    for (let i = 0; i < count; i++) {
+      arr.push({
+        pos: new THREE.Vector3(0, -999, 0),
+        vel: new THREE.Vector3(0, 0, 0),
+        life: 0,
+        maxLife: 1,
+        size: 0.02,
+      });
+    }
+    particlesRef.current = arr;
+  }, [count]);
+
+  useFrame((_, dt) => {
+    const m = meshRef.current;
+    if (!m) return;
+
+    const dummy = new THREE.Object3D();
+    const p = particlesRef.current;
+
+    for (let i = 0; i < p.length; i++) {
+      const it = p[i];
+      if (it.life <= 0) {
+        dummy.position.set(0, -999, 0);
+        dummy.scale.setScalar(0.0001);
+        dummy.updateMatrix();
+        m.setMatrixAt(i, dummy.matrix);
+        continue;
+      }
+
+      it.life -= dt;
+      // gravity + drag
+      it.vel.y -= 2.4 * dt;
+      it.vel.multiplyScalar(0.985);
+
+      it.pos.addScaledVector(it.vel, dt);
+
+      const a = THREE.MathUtils.clamp(it.life / it.maxLife, 0, 1);
+      const scale = it.size * (0.6 + (1 - a) * 0.8);
+
+      dummy.position.copy(it.pos);
+      dummy.scale.setScalar(scale);
+      dummy.updateMatrix();
+      m.setMatrixAt(i, dummy.matrix);
+    }
+
+    m.instanceMatrix.needsUpdate = true;
+
+    // material tint
+    if (m.material) {
+      const mat = m.material;
+      mat.color.copy(colorRef.current);
+      mat.emissive.copy(colorRef.current);
+      mat.emissiveIntensity = themeKey === "neon" ? 1.0 : 0.55;
+      mat.opacity = themeKey === "neon" ? 0.95 : 0.8;
+    }
+  });
+
+  return (
+    <instancedMesh ref={meshRef} args={[null, null, count]}>
+      <sphereGeometry args={[1, 10, 10]} />
+      <meshStandardMaterial
+        color={tokens.spark}
+        emissive={tokens.spark}
+        emissiveIntensity={themeKey === "neon" ? 1.0 : 0.55}
+        roughness={0.2}
+        metalness={0.15}
+        transparent
+        opacity={0.85}
+      />
+    </instancedMesh>
+  );
+}
+
+/* =========================
+   Presents (with lid + random event)
+========================= */
+
+function Presents({ themeKey, burstControllerRef }) {
+  const groupRef = useRef(null);
+
+  // lid animation state: per gift
+  const openStateRef = useRef([]); // {active,start,dur}
+  const lidRef = useRef([]); // group pivots
+
+  const schedulerRef = useRef({
+    next: 0,
+    activeIdx: -1,
+    start: 0,
+    dur: 1.2,
+  });
+
+  const items = useMemo(() => {
+    const base = [];
+    const ring = 1.35;
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const x = Math.cos(a) * ring * (0.82 + (i % 3) * 0.08);
+      const z = Math.sin(a) * ring * (0.82 + (i % 2) * 0.1);
+      const h = 0.12 + (i % 4) * 0.03;
+      const w = 0.18 + (i % 3) * 0.05;
+      base.push({ p: [x, -0.47 - (i % 2) * 0.02, z], s: [w, h, w] });
+    }
+    base.push({ p: [0.35, -0.44, 0.1], s: [0.36, 0.22, 0.36] });
+    base.push({ p: [-0.35, -0.46, -0.1], s: [0.32, 0.18, 0.32] });
+    return base;
+  }, []);
+
+  const palette = useMemo(() => {
+    if (themeKey === "neon") return ["#00ffb4", "#ff46ff", "#7a4dff"];
+    if (themeKey === "snow") return ["#dcf6ff", "#bfe4ff", "#ffffff"];
+    if (themeKey === "lux") return ["#ff4d4d", "#ffd57c", "#48d18d"];
+    return ["#ffffff", "#ffe49a", "#d7e3ff"];
+  }, [themeKey]);
+
+  useEffect(() => {
+    // init open states
+    openStateRef.current = items.map(() => ({
+      active: false,
+      start: 0,
+      dur: 1.2,
+    }));
+    lidRef.current = items.map(() => null);
+    schedulerRef.current.next = 0;
+    schedulerRef.current.activeIdx = -1;
+  }, [items]);
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    const g = groupRef.current;
+    if (g) {
+      g.position.y = Math.sin(t * 0.8) * 0.01;
+      g.rotation.y = Math.sin(t * 0.35) * 0.06;
+    }
+
+    // schedule random gift event
+    const sch = schedulerRef.current;
+    if (sch.next === 0) {
+      sch.next = t + 2.5 + Math.random() * 2.5;
+    }
+    if (t >= sch.next) {
+      const idx = Math.floor(Math.random() * items.length);
+      sch.activeIdx = idx;
+      sch.start = t;
+      sch.dur = 1.1 + Math.random() * 0.6;
+      sch.next = t + 3.2 + Math.random() * 3.0;
+
+      // fire burst at gift position
+      const it = items[idx];
+      const origin = new THREE.Vector3(
+        it.p[0],
+        it.p[1] + it.s[1] + 0.08,
+        it.p[2]
+      );
+      const burstColor = palette[idx % palette.length];
+      burstControllerRef?.current?.fire(origin, burstColor);
+
+      // mark active
+      const st = openStateRef.current[idx];
+      if (st) {
+        st.active = true;
+        st.start = t;
+        st.dur = sch.dur;
+      }
+    }
+
+    // animate lids
+    for (let i = 0; i < items.length; i++) {
+      const pivot = lidRef.current[i];
+      const st = openStateRef.current[i];
+      if (!pivot || !st) continue;
+
+      if (!st.active) {
+        // ease back to closed
+        pivot.rotation.x = THREE.MathUtils.lerp(pivot.rotation.x, 0, 0.12);
+        continue;
+      }
+
+      const p = (t - st.start) / st.dur;
+      if (p >= 1) {
+        st.active = false;
+        continue;
+      }
+
+      // open then close: 0->1->0 (tri)
+      const tri = p < 0.5 ? p / 0.5 : (1 - p) / 0.5;
+      const eased = smoothstep(0, 1, tri);
+
+      const maxOpen = 0.85; // rad
+      pivot.rotation.x = -maxOpen * eased;
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      {items.map((it, idx) => {
+        const c = palette[idx % palette.length];
+        const ribbon = palette[(idx + 1) % palette.length];
+
+        const [w, h, d] = it.s;
+        const lidTh = Math.max(0.03, h * 0.18);
+
+        const emiss = themeKey === "neon" ? 0.55 : 0.14;
+
+        return (
+          <group key={idx} position={it.p}>
+            {/* base */}
+            <mesh>
+              <boxGeometry args={[w, h, d]} />
+              <meshStandardMaterial
+                color={c}
+                roughness={0.35}
+                metalness={0.22}
+              />
+            </mesh>
+
+            {/* ribbon cross */}
+            <mesh position={[0, h * 0.05, 0]}>
+              <boxGeometry args={[w * 1.02, h * 0.18, d * 0.18]} />
+              <meshStandardMaterial
+                color={ribbon}
+                roughness={0.2}
+                metalness={0.35}
+                emissive={ribbon}
+                emissiveIntensity={emiss}
+              />
+            </mesh>
+            <mesh position={[0, h * 0.05, 0]}>
+              <boxGeometry args={[w * 0.18, h * 0.18, d * 1.02]} />
+              <meshStandardMaterial
+                color={ribbon}
+                roughness={0.2}
+                metalness={0.35}
+                emissive={ribbon}
+                emissiveIntensity={emiss}
+              />
+            </mesh>
+
+            {/* lid: pivot at top-back edge */}
+            <group
+              ref={(el) => (lidRef.current[idx] = el)}
+              position={[0, h / 2 + lidTh / 2, -d / 2]}
+            >
+              <mesh position={[0, 0, d / 2]}>
+                <boxGeometry args={[w * 1.02, lidTh, d * 1.02]} />
+                <meshStandardMaterial
+                  color={themeKey === "neon" ? "#101020" : "#ffffff"}
+                  roughness={0.32}
+                  metalness={0.18}
+                  emissive={ribbon}
+                  emissiveIntensity={themeKey === "neon" ? 0.2 : 0.06}
+                  transparent
+                  opacity={themeKey === "neon" ? 0.9 : 0.92}
+                />
+              </mesh>
+            </group>
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+/* =========================
+   Santa
+========================= */
 
 function Santa({ enabled, themeKey }) {
   const rootRef = useRef(null);
@@ -371,7 +632,6 @@ function Santa({ enabled, themeKey }) {
     if (!enabled) return;
     const t = clock.getElapsedTime();
 
-    // 트리 주변 걷기(원 궤도)
     const r = 1.65;
     const sp = 0.35;
     const ang = t * sp;
@@ -382,10 +642,9 @@ function Santa({ enabled, themeKey }) {
     const root = rootRef.current;
     if (root) {
       root.position.set(x, -0.44 + Math.sin(t * 2.2) * 0.02, z);
-      root.rotation.y = -ang + Math.PI / 2; // 진행 방향 바라보기
+      root.rotation.y = -ang + Math.PI / 2;
     }
 
-    // 손 흔들기
     const arm = armRef.current;
     if (arm) {
       arm.rotation.z = Math.sin(t * 5.0) * 0.6 + 0.2;
@@ -397,7 +656,6 @@ function Santa({ enabled, themeKey }) {
 
   return (
     <group ref={rootRef}>
-      {/* 몸통 */}
       <mesh position={[0, 0.18, 0]}>
         <cylinderGeometry args={[0.14, 0.18, 0.32, 18]} />
         <meshStandardMaterial
@@ -409,7 +667,6 @@ function Santa({ enabled, themeKey }) {
         />
       </mesh>
 
-      {/* 머리 */}
       <mesh position={[0, 0.44, 0]}>
         <sphereGeometry args={[0.11, 18, 18]} />
         <meshStandardMaterial
@@ -419,7 +676,6 @@ function Santa({ enabled, themeKey }) {
         />
       </mesh>
 
-      {/* 수염 */}
       <mesh position={[0, 0.39, 0.08]}>
         <sphereGeometry args={[0.095, 18, 18]} />
         <meshStandardMaterial
@@ -429,7 +685,6 @@ function Santa({ enabled, themeKey }) {
         />
       </mesh>
 
-      {/* 모자 */}
       <mesh position={[0, 0.55, 0]}>
         <coneGeometry args={[0.12, 0.22, 18]} />
         <meshStandardMaterial
@@ -445,7 +700,6 @@ function Santa({ enabled, themeKey }) {
         <meshStandardMaterial color="#ffffff" roughness={0.9} metalness={0.0} />
       </mesh>
 
-      {/* 다리 */}
       <mesh position={[-0.06, -0.02, 0]}>
         <cylinderGeometry args={[0.045, 0.05, 0.22, 12]} />
         <meshStandardMaterial color="#1b1b22" roughness={0.9} metalness={0.0} />
@@ -455,7 +709,6 @@ function Santa({ enabled, themeKey }) {
         <meshStandardMaterial color="#1b1b22" roughness={0.9} metalness={0.0} />
       </mesh>
 
-      {/* 팔(오른팔만 흔들기) */}
       <group ref={armRef} position={[0.18, 0.28, 0]}>
         <mesh position={[0.06, 0, 0]}>
           <cylinderGeometry args={[0.04, 0.04, 0.22, 12]} />
@@ -475,7 +728,6 @@ function Santa({ enabled, themeKey }) {
         </mesh>
       </group>
 
-      {/* 왼팔 */}
       <mesh position={[-0.18, 0.28, 0]} rotation={[0, 0, -0.25]}>
         <cylinderGeometry args={[0.04, 0.04, 0.22, 12]} />
         <meshStandardMaterial
@@ -487,6 +739,237 @@ function Santa({ enabled, themeKey }) {
     </group>
   );
 }
+
+/* =========================
+   Rudolph (head look at tree sometimes)
+========================= */
+
+function Rudolph({ enabled, themeKey }) {
+  const rootRef = useRef(null);
+  const headRef = useRef(null);
+  const noseMatRef = useRef(null);
+
+  // look scheduler
+  const lookRef = useRef({
+    next: 0,
+    start: 0,
+    end: 0,
+  });
+
+  const colors = useMemo(() => {
+    if (themeKey === "neon") {
+      return { fur: "#7a4dff", horn: "#00ffb4", nose: "#ff46ff" };
+    }
+    return { fur: "#8b5a3c", horn: "#d8c7b7", nose: "#ff3b3b" };
+  }, [themeKey]);
+
+  useFrame(({ clock }) => {
+    if (!enabled) return;
+    const t = clock.getElapsedTime();
+
+    // orbit
+    const r = 2.25;
+    const sp = 0.28;
+    const ang = t * sp + 1.2;
+
+    const x = Math.cos(ang) * r;
+    const z = Math.sin(ang) * r;
+
+    const root = rootRef.current;
+    if (root) {
+      root.position.set(x, -0.46 + Math.sin(t * 2.0) * 0.015, z);
+      root.rotation.y = -ang + Math.PI / 2;
+      root.rotation.x = Math.sin(t * 3.2) * 0.03;
+    }
+
+    // nose pulse
+    const nm = noseMatRef.current;
+    if (nm) {
+      const pulse =
+        0.7 +
+        0.5 * (0.5 + 0.5 * Math.sin(t * (themeKey === "neon" ? 6.0 : 4.2)));
+      nm.emissiveIntensity = themeKey === "neon" ? 2.2 * pulse : 1.35 * pulse;
+    }
+
+    // schedule occasional "look at tree"
+    const lk = lookRef.current;
+    if (lk.next === 0) lk.next = t + 2 + Math.random() * 3;
+
+    if (t >= lk.next) {
+      const dur = 0.9 + Math.random() * 1.2;
+      lk.start = t;
+      lk.end = t + dur;
+      lk.next = t + 3.0 + Math.random() * 4.5; // next look
+    }
+
+    const head = headRef.current;
+    if (head && root) {
+      const active = t < lk.end;
+      let w = 0;
+
+      if (active) {
+        const inT = smoothstep(lk.start, lk.start + 0.18, t);
+        const outT = 1 - smoothstep(lk.end - 0.18, lk.end, t);
+        w = inT * outT;
+      }
+
+      // desired yaw to face origin (tree)
+      const originWorld = new THREE.Vector3(0, 0.9, 0);
+
+      // head world position approx: root local + head local
+      const headWorld = new THREE.Vector3();
+      head.getWorldPosition(headWorld);
+
+      const dirWorld = originWorld.clone().sub(headWorld).normalize();
+
+      // convert world direction into root local space
+      const invRootQ = root.getWorldQuaternion(new THREE.Quaternion()).invert();
+      const dirLocal = dirWorld.clone().applyQuaternion(invRootQ);
+
+      const desiredYaw = Math.atan2(dirLocal.x, dirLocal.z); // yaw around y
+      const desiredPitch = -Math.atan2(
+        dirLocal.y,
+        Math.sqrt(dirLocal.x * dirLocal.x + dirLocal.z * dirLocal.z)
+      );
+
+      const yaw = THREE.MathUtils.clamp(desiredYaw, -0.9, 0.9);
+      const pitch = THREE.MathUtils.clamp(desiredPitch, -0.35, 0.25);
+
+      // baseline subtle head motion
+      const baseYaw = Math.sin(t * 2.2) * 0.05;
+      const basePitch = Math.sin(t * 1.9) * 0.03;
+
+      const targetYaw = baseYaw + yaw * w;
+      const targetPitch = basePitch + pitch * w;
+
+      head.rotation.y = THREE.MathUtils.lerp(head.rotation.y, targetYaw, 0.12);
+      head.rotation.x = THREE.MathUtils.lerp(
+        head.rotation.x,
+        targetPitch,
+        0.12
+      );
+    }
+  });
+
+  if (!enabled) return null;
+
+  return (
+    <group ref={rootRef}>
+      {/* body */}
+      <mesh position={[0, 0.18, 0]}>
+        <sphereGeometry args={[0.18, 18, 18]} />
+        <meshStandardMaterial
+          color={colors.fur}
+          roughness={0.75}
+          metalness={0.05}
+        />
+      </mesh>
+
+      {/* back */}
+      <mesh position={[-0.18, 0.18, 0]}>
+        <sphereGeometry args={[0.14, 18, 18]} />
+        <meshStandardMaterial
+          color={colors.fur}
+          roughness={0.78}
+          metalness={0.04}
+        />
+      </mesh>
+
+      {/* legs */}
+      {[
+        [-0.08, -0.05, 0.1],
+        [0.05, -0.05, 0.1],
+        [-0.14, -0.05, -0.1],
+        [-0.01, -0.05, -0.1],
+      ].map((p, i) => (
+        <mesh key={i} position={p}>
+          <cylinderGeometry args={[0.03, 0.035, 0.28, 12]} />
+          <meshStandardMaterial
+            color="#1b1b22"
+            roughness={0.9}
+            metalness={0.0}
+          />
+        </mesh>
+      ))}
+
+      {/* head group (look animation applied here) */}
+      <group ref={headRef} position={[0.28, 0.34, 0]}>
+        {/* neck */}
+        <mesh position={[-0.06, -0.08, 0]}>
+          <sphereGeometry args={[0.11, 18, 18]} />
+          <meshStandardMaterial
+            color={colors.fur}
+            roughness={0.72}
+            metalness={0.05}
+          />
+        </mesh>
+
+        {/* head */}
+        <mesh position={[0.08, -0.02, 0]}>
+          <sphereGeometry args={[0.12, 18, 18]} />
+          <meshStandardMaterial
+            color={colors.fur}
+            roughness={0.7}
+            metalness={0.05}
+          />
+        </mesh>
+
+        {/* nose (emissive) */}
+        <mesh position={[0.22, -0.04, 0]}>
+          <sphereGeometry args={[0.04, 16, 16]} />
+          <meshStandardMaterial
+            ref={noseMatRef}
+            color={colors.nose}
+            emissive={colors.nose}
+            emissiveIntensity={1.2}
+            roughness={0.25}
+            metalness={0.2}
+          />
+        </mesh>
+
+        {/* horns */}
+        <group position={[0.05, 0.13, 0]}>
+          <mesh rotation={[0, 0, 0.25]} position={[0.02, 0, 0.06]}>
+            <coneGeometry args={[0.035, 0.18, 10]} />
+            <meshStandardMaterial
+              color={colors.horn}
+              roughness={0.65}
+              metalness={0.05}
+              emissive={colors.horn}
+              emissiveIntensity={themeKey === "neon" ? 0.35 : 0.05}
+            />
+          </mesh>
+          <mesh rotation={[0, 0, -0.25]} position={[0.02, 0, -0.06]}>
+            <coneGeometry args={[0.035, 0.18, 10]} />
+            <meshStandardMaterial
+              color={colors.horn}
+              roughness={0.65}
+              metalness={0.05}
+              emissive={colors.horn}
+              emissiveIntensity={themeKey === "neon" ? 0.35 : 0.05}
+            />
+          </mesh>
+        </group>
+      </group>
+
+      {/* tail */}
+      <mesh position={[-0.32, 0.28, 0]}>
+        <sphereGeometry args={[0.05, 14, 14]} />
+        <meshStandardMaterial
+          color="#ffffff"
+          roughness={0.9}
+          metalness={0.0}
+          transparent
+          opacity={0.85}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+/* =========================
+   Tree (wind + ornaments + lights)
+========================= */
 
 function TreeModel({ themeKey, tokens, seed, ornamentCount }) {
   const treeGroupRef = useRef(null);
@@ -532,6 +1015,7 @@ function TreeModel({ themeKey, tokens, seed, ornamentCount }) {
       }),
     [tokens.trunk]
   );
+
   const starMat = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
@@ -582,9 +1066,25 @@ function TreeModel({ themeKey, tokens, seed, ornamentCount }) {
         tokens={tokens}
         count={themeKey === "lux" ? 54 : 44}
       />
+
+      {/* floor disk */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.52, 0]}>
+        <circleGeometry args={[3.2, 64]} />
+        <meshStandardMaterial
+          color="#0d0f18"
+          roughness={0.95}
+          metalness={0.0}
+          transparent
+          opacity={0.92}
+        />
+      </mesh>
     </group>
   );
 }
+
+/* =========================
+   Camera rig (preset, no text)
+========================= */
 
 function CameraRig({
   themeKey,
@@ -609,7 +1109,6 @@ function CameraRig({
     desired.current.fov = p.fov;
     desired.current.autoRotateSpeed = p.autoRotateSpeed ?? 0.8;
 
-    // 프리셋이 추천하는 회전은 반영 (단, 드래그 중이면 즉시 강제하지 않음)
     if (!dragLockRef.current && typeof p.autoRotate === "boolean")
       setAutoRotate(p.autoRotate);
   }, [themeKey, setAutoRotate, dragLockRef]);
@@ -618,7 +1117,6 @@ function CameraRig({
     const ctl = controlsRef.current;
     if (!ctl) return;
 
-    // 드래그 중에는 프리셋이 카메라를 "밀어내지" 않도록
     if (!dragLockRef.current) {
       camera.position.lerp(desired.current.pos, 0.07);
       ctl.target.lerp(desired.current.target, 0.09);
@@ -635,6 +1133,10 @@ function CameraRig({
   return null;
 }
 
+/* =========================
+   Main Component
+========================= */
+
 export default function ChristmasTree3D() {
   const [theme, setTheme] = useState("minimal");
   const [seed, setSeed] = useState(20251225);
@@ -645,14 +1147,16 @@ export default function ChristmasTree3D() {
   const [ornamentCount, setOrnamentCount] = useState(36);
 
   const [showSanta, setShowSanta] = useState(true);
+  const [showRudolph, setShowRudolph] = useState(true);
   const [showSnow, setShowSnow] = useState(true);
   const [showPresents, setShowPresents] = useState(true);
 
   const tokens = THEME_TOKENS[theme];
-  const controlsRef = useRef(null);
 
-  // 드래그 중 프리셋/오토로테이트 제어용
+  const controlsRef = useRef(null);
   const dragLockRef = useRef(false);
+
+  const burstControllerRef = useRef(null);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -662,10 +1166,7 @@ export default function ChristmasTree3D() {
     root.style.setProperty("--xmas-fg", tokens.fg);
   }, [tokens]);
 
-  const onResetView = () => {
-    controlsRef.current?.reset();
-  };
-
+  const onResetView = () => controlsRef.current?.reset();
   const onShuffle = () => setSeed((s) => s + 1);
 
   return (
@@ -698,6 +1199,13 @@ export default function ChristmasTree3D() {
               type="button"
             >
               🧑‍🎄
+            </button>
+            <button
+              className={`pill ${showRudolph ? "on" : ""}`}
+              onClick={() => setShowRudolph((v) => !v)}
+              type="button"
+            >
+              🦌
             </button>
             <button
               className={`pill ${showSnow ? "on" : ""}`}
@@ -753,7 +1261,7 @@ export default function ChristmasTree3D() {
               position: CAMERA_PRESETS.minimal.pos,
               fov: CAMERA_PRESETS.minimal.fov,
               near: 0.1,
-              far: 60,
+              far: 80,
             }}
           >
             <color attach="background" args={[tokens.bg]} />
@@ -762,42 +1270,39 @@ export default function ChristmasTree3D() {
               args={[tokens.fog.color, tokens.fog.near, tokens.fog.far]}
             />
 
-            {/* 조명 */}
             <ambientLight intensity={0.45} />
-            <directionalLight position={[4, 6, 3]} intensity={1.2} />
+            <directionalLight position={[4, 7, 3]} intensity={1.25} />
             <pointLight
               position={[0, 2.05, 0]}
               intensity={1.35}
               color={tokens.light}
-              distance={7}
+              distance={9}
             />
 
-            {/* 환경 */}
             <Environment preset={tokens.env} />
             <ContactShadows
               position={[0, -0.52, 0]}
               opacity={0.42}
               blur={2.8}
-              far={6.5}
+              far={8.0}
             />
 
-            {/* 분위기 */}
             <Sparkles
-              count={theme === "neon" ? 110 : 70}
+              count={theme === "neon" ? 120 : 80}
               size={2.2}
               speed={0.55}
               opacity={0.55}
               color={tokens.spark}
-              scale={[7, 4, 7]}
+              scale={[8, 4.5, 8]}
             />
 
-            {/* 눈 */}
+            {/* snow */}
             <Snowfall
               enabled={showSnow && (theme === "snow" || theme === "minimal")}
-              count={theme === "snow" ? 1300 : 900}
+              count={theme === "snow" ? 1400 : 950}
             />
 
-            {/* 트리 */}
+            {/* tree */}
             <TreeModel
               themeKey={theme}
               tokens={tokens}
@@ -805,13 +1310,27 @@ export default function ChristmasTree3D() {
               ornamentCount={ornamentCount}
             />
 
-            {/* 선물 */}
-            {showPresents && <Presents themeKey={theme} />}
+            {/* gift burst particles controller */}
+            <BurstParticles
+              tokens={tokens}
+              themeKey={theme}
+              controllerRef={burstControllerRef}
+              count={96}
+            />
 
-            {/* 캐릭터 */}
+            {/* presents with lid event */}
+            {showPresents && (
+              <Presents
+                themeKey={theme}
+                burstControllerRef={burstControllerRef}
+              />
+            )}
+
+            {/* characters */}
             <Santa enabled={showSanta} themeKey={theme} />
+            <Rudolph enabled={showRudolph} themeKey={theme} />
 
-            {/* 카메라 프리셋 + 드래그 락 */}
+            {/* camera preset */}
             <CameraRig
               themeKey={theme}
               controlsRef={controlsRef}
@@ -826,8 +1345,8 @@ export default function ChristmasTree3D() {
               enableDamping
               dampingFactor={0.06}
               rotateSpeed={0.7}
-              minDistance={5.2}
-              maxDistance={16.0}
+              minDistance={5.8}
+              maxDistance={19.0}
               target={CAMERA_PRESETS.minimal.target}
               onStart={() => {
                 dragLockRef.current = true;
@@ -835,7 +1354,6 @@ export default function ChristmasTree3D() {
               }}
               onEnd={() => {
                 dragLockRef.current = false;
-                // 테마 프리셋이 추천하는 회전 상태로 복귀
                 const p = CAMERA_PRESETS[theme] ?? CAMERA_PRESETS.minimal;
                 setAutoRotate(Boolean(p.autoRotate));
               }}
