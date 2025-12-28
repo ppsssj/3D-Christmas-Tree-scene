@@ -1,0 +1,149 @@
+:root{
+  --xmas-bg:#0b1020;
+  --xmas-panel:rgba(255,255,255,0.06);
+  --xmas-stroke:rgba(255,255,255,0.10);
+  --xmas-fg:rgba(255,255,255,0.92);
+}
+
+.x3d.stage{
+  min-height:100vh;
+  padding:22px;
+  background: radial-gradient(1200px 700px at 70% 20%, rgba(120,160,255,0.18), transparent 55%),
+              radial-gradient(900px 600px at 30% 80%, rgba(255,255,255,0.08), transparent 55%),
+              var(--xmas-bg);
+  color:var(--xmas-fg);
+  transition: background 220ms ease, color 220ms ease;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Apple SD Gothic Neo", "Noto Sans KR";
+}
+
+.x3d-header{
+  max-width:1200px;
+  margin:0 auto 14px auto;
+  display:flex;
+  gap:12px;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.x3d-left{
+  display:flex;
+  gap:12px;
+  align-items:center;
+}
+
+.x3d-badge{
+  width:46px;
+  height:46px;
+  border-radius:16px;
+  display:grid;
+  place-items:center;
+  font-weight:900;
+  letter-spacing:0.08em;
+  background: rgba(255,255,255,0.12);
+  border:1px solid var(--xmas-stroke);
+  box-shadow:0 10px 35px rgba(0,0,0,0.22);
+}
+
+.segmented{
+  display:inline-flex;
+  padding:6px;
+  border-radius:18px;
+  background:var(--xmas-panel);
+  border:1px solid var(--xmas-stroke);
+  box-shadow:0 18px 55px rgba(0,0,0,0.18);
+  backdrop-filter: blur(10px);
+}
+
+.seg-btn{
+  border:0;
+  background:transparent;
+  color:var(--xmas-fg);
+  padding:9px 12px;
+  border-radius:14px;
+  cursor:pointer;
+  opacity:0.75;
+  font-size:13px;
+  transition: opacity 180ms ease, background 180ms ease, transform 180ms ease;
+}
+.seg-btn:hover{ opacity:0.95; transform: translateY(-1px); }
+.seg-btn.active{
+  opacity:1;
+  background: rgba(255,255,255,0.16);
+  box-shadow:0 10px 30px rgba(0,0,0,0.14);
+}
+
+.x3d-right{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.pillbar{
+  display:inline-flex;
+  gap:8px;
+  padding:8px;
+  border-radius:18px;
+  background: var(--xmas-panel);
+  border:1px solid var(--xmas-stroke);
+  box-shadow:0 18px 55px rgba(0,0,0,0.16);
+  backdrop-filter: blur(10px);
+}
+
+.pill{
+  width:40px;
+  height:40px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.06);
+  color: var(--xmas-fg);
+  cursor:pointer;
+  transition: transform 160ms ease, background 160ms ease, opacity 160ms ease, box-shadow 160ms ease;
+  opacity:0.86;
+}
+.pill:hover{ transform: translateY(-1px); opacity:1; }
+.pill.on{
+  background: rgba(255,255,255,0.16);
+  box-shadow: 0 12px 34px rgba(0,0,0,0.20);
+  opacity:1;
+}
+
+.range{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:0 10px;
+  height:40px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+}
+.range span{ opacity:0.65; }
+.range input[type="range"]{ width:140px; }
+
+.x3d-main{
+  max-width:1200px;
+  margin:0 auto;
+}
+
+.card{
+  border-radius:24px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.04));
+  border:1px solid var(--xmas-stroke);
+  box-shadow:0 24px 80px rgba(0,0,0,0.22);
+  overflow:hidden;
+}
+
+.scene{
+  height: 74vh;
+  min-height: 560px;
+  position:relative;
+}
+
+.canvas{
+  width:100%;
+  height:100%;
+  display:block;
+}
