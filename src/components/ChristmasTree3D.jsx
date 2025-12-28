@@ -5,6 +5,7 @@ import {
   Environment,
   ContactShadows,
   Sparkles,
+  useCursor,
 } from "@react-three/drei";
 import * as THREE from "three";
 import "./ChristmasTree3D.css";
@@ -83,7 +84,7 @@ const THEME_TOKENS = {
   },
 };
 
-// 더 멀리 + y 낮춰서 아래에서 올려다보는 구도
+// 더 멀리 + 아래에서 올려다보는 구도
 const CAMERA_PRESETS = {
   minimal: {
     pos: [0.0, 1.15, 7.6],
@@ -171,11 +172,8 @@ function ChaseLights({ themeKey, tokens, count = 44 }) {
       const y = 0.35 + u * 1.65;
       const tt = THREE.MathUtils.clamp((y - 0.35) / 1.65, 0, 1);
       const radius = (1 - tt) * 0.22 + tt * 0.82;
-
       const angle = u * Math.PI * 8.0;
-      const x = Math.cos(angle) * radius;
-      const z = Math.sin(angle) * radius;
-      arr.push([x, y, z]);
+      arr.push([Math.cos(angle) * radius, y, Math.sin(angle) * radius]);
     }
     return arr;
   }, [count]);
@@ -212,10 +210,8 @@ function ChaseLights({ themeKey, tokens, count = 44 }) {
       d = Math.min(d, 1 - d);
 
       const glow = Math.exp(-(d * d) / (2 * width * width));
-      const intensity = 0.35 + glow * 2.2;
-
       m.emissive.copy(baseColor);
-      m.emissiveIntensity = intensity;
+      m.emissiveIntensity = 0.35 + glow * 2.2;
       m.opacity = 0.55 + glow * 0.45;
     }
   });
@@ -298,13 +294,12 @@ function Snowfall({ enabled, count = 900 }) {
 }
 
 /* =========================
-   Burst particles (gift event)
+   Burst particles controller
 ========================= */
 
 function BurstParticles({ tokens, themeKey, controllerRef, count = 96 }) {
   const meshRef = useRef(null);
   const particlesRef = useRef([]);
-  const originRef = useRef(new THREE.Vector3());
   const colorRef = useRef(new THREE.Color(tokens.spark));
 
   useEffect(() => {
@@ -312,34 +307,6 @@ function BurstParticles({ tokens, themeKey, controllerRef, count = 96 }) {
   }, [tokens.spark]);
 
   useEffect(() => {
-    // expose fire() to parent via controllerRef
-    if (!controllerRef) return;
-    controllerRef.current = {
-      fire: (origin, colorHex) => {
-        originRef.current.copy(origin);
-        if (colorHex) colorRef.current = new THREE.Color(colorHex);
-        const rnd = mulberry32(Math.floor(Math.random() * 1e9));
-        const p = particlesRef.current;
-
-        for (let i = 0; i < p.length; i++) {
-          const dir = new THREE.Vector3(
-            rnd() * 2 - 1,
-            rnd() * 1.3 + 0.2,
-            rnd() * 2 - 1
-          ).normalize();
-          const sp = 1.6 + rnd() * 2.2;
-          p[i].pos.copy(originRef.current);
-          p[i].vel.copy(dir.multiplyScalar(sp));
-          p[i].life = 0.9 + rnd() * 0.7; // seconds
-          p[i].maxLife = p[i].life;
-          p[i].size = 0.02 + rnd() * 0.02;
-        }
-      },
-    };
-  }, [controllerRef]);
-
-  useEffect(() => {
-    // init particle slots
     const arr = [];
     for (let i = 0; i < count; i++) {
       arr.push({
@@ -352,6 +319,31 @@ function BurstParticles({ tokens, themeKey, controllerRef, count = 96 }) {
     }
     particlesRef.current = arr;
   }, [count]);
+
+  useEffect(() => {
+    if (!controllerRef) return;
+    controllerRef.current = {
+      fire: (origin, colorHex) => {
+        if (colorHex) colorRef.current = new THREE.Color(colorHex);
+        const rnd = mulberry32(Math.floor(Math.random() * 1e9));
+        const p = particlesRef.current;
+
+        for (let i = 0; i < p.length; i++) {
+          const dir = new THREE.Vector3(
+            rnd() * 2 - 1,
+            rnd() * 1.3 + 0.2,
+            rnd() * 2 - 1
+          ).normalize();
+          const sp = 1.6 + rnd() * 2.2;
+          p[i].pos.copy(origin);
+          p[i].vel.copy(dir.multiplyScalar(sp));
+          p[i].life = 0.9 + rnd() * 0.7;
+          p[i].maxLife = p[i].life;
+          p[i].size = 0.02 + rnd() * 0.02;
+        }
+      },
+    };
+  }, [controllerRef]);
 
   useFrame((_, dt) => {
     const m = meshRef.current;
@@ -371,10 +363,8 @@ function BurstParticles({ tokens, themeKey, controllerRef, count = 96 }) {
       }
 
       it.life -= dt;
-      // gravity + drag
       it.vel.y -= 2.4 * dt;
       it.vel.multiplyScalar(0.985);
-
       it.pos.addScaledVector(it.vel, dt);
 
       const a = THREE.MathUtils.clamp(it.life / it.maxLife, 0, 1);
@@ -388,7 +378,6 @@ function BurstParticles({ tokens, themeKey, controllerRef, count = 96 }) {
 
     m.instanceMatrix.needsUpdate = true;
 
-    // material tint
     if (m.material) {
       const mat = m.material;
       mat.color.copy(colorRef.current);
@@ -415,22 +404,20 @@ function BurstParticles({ tokens, themeKey, controllerRef, count = 96 }) {
 }
 
 /* =========================
-   Presents (with lid + random event)
+   Presents (random + click event)
 ========================= */
 
 function Presents({ themeKey, burstControllerRef }) {
   const groupRef = useRef(null);
+  const lidRef = useRef([]);
+  const openStateRef = useRef([]);
+  const schedulerRef = useRef({ next: 0 });
 
-  // lid animation state: per gift
-  const openStateRef = useRef([]); // {active,start,dur}
-  const lidRef = useRef([]); // group pivots
+  const [hovered, setHovered] = useState(false);
+  useCursor(hovered);
 
-  const schedulerRef = useRef({
-    next: 0,
-    activeIdx: -1,
-    start: 0,
-    dur: 1.2,
-  });
+  // click queue
+  const pendingClickRef = useRef(null);
 
   const items = useMemo(() => {
     const base = [];
@@ -456,54 +443,58 @@ function Presents({ themeKey, burstControllerRef }) {
   }, [themeKey]);
 
   useEffect(() => {
-    // init open states
     openStateRef.current = items.map(() => ({
       active: false,
       start: 0,
       dur: 1.2,
+      strength: 1.0,
     }));
     lidRef.current = items.map(() => null);
     schedulerRef.current.next = 0;
-    schedulerRef.current.activeIdx = -1;
   }, [items]);
+
+  const triggerGift = (idx, t, strong = false) => {
+    const st = openStateRef.current[idx];
+    if (!st) return;
+
+    st.active = true;
+    st.start = t;
+    st.dur = strong ? 1.6 : 1.1 + Math.random() * 0.6;
+    st.strength = strong ? 1.25 : 1.0;
+
+    const it = items[idx];
+    const origin = new THREE.Vector3(
+      it.p[0],
+      it.p[1] + it.s[1] + 0.08,
+      it.p[2]
+    );
+    const burstColor = palette[idx % palette.length];
+    burstControllerRef?.current?.fire(origin, burstColor);
+  };
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
+
     const g = groupRef.current;
     if (g) {
       g.position.y = Math.sin(t * 0.8) * 0.01;
       g.rotation.y = Math.sin(t * 0.35) * 0.06;
     }
 
-    // schedule random gift event
-    const sch = schedulerRef.current;
-    if (sch.next === 0) {
-      sch.next = t + 2.5 + Math.random() * 2.5;
+    // click triggered
+    if (pendingClickRef.current != null) {
+      const idx = pendingClickRef.current;
+      pendingClickRef.current = null;
+      triggerGift(idx, t, true);
     }
+
+    // random schedule
+    const sch = schedulerRef.current;
+    if (sch.next === 0) sch.next = t + 2.5 + Math.random() * 2.5;
     if (t >= sch.next) {
       const idx = Math.floor(Math.random() * items.length);
-      sch.activeIdx = idx;
-      sch.start = t;
-      sch.dur = 1.1 + Math.random() * 0.6;
+      triggerGift(idx, t, false);
       sch.next = t + 3.2 + Math.random() * 3.0;
-
-      // fire burst at gift position
-      const it = items[idx];
-      const origin = new THREE.Vector3(
-        it.p[0],
-        it.p[1] + it.s[1] + 0.08,
-        it.p[2]
-      );
-      const burstColor = palette[idx % palette.length];
-      burstControllerRef?.current?.fire(origin, burstColor);
-
-      // mark active
-      const st = openStateRef.current[idx];
-      if (st) {
-        st.active = true;
-        st.start = t;
-        st.dur = sch.dur;
-      }
     }
 
     // animate lids
@@ -513,7 +504,6 @@ function Presents({ themeKey, burstControllerRef }) {
       if (!pivot || !st) continue;
 
       if (!st.active) {
-        // ease back to closed
         pivot.rotation.x = THREE.MathUtils.lerp(pivot.rotation.x, 0, 0.12);
         continue;
       }
@@ -524,11 +514,10 @@ function Presents({ themeKey, burstControllerRef }) {
         continue;
       }
 
-      // open then close: 0->1->0 (tri)
       const tri = p < 0.5 ? p / 0.5 : (1 - p) / 0.5;
       const eased = smoothstep(0, 1, tri);
 
-      const maxOpen = 0.85; // rad
+      const maxOpen = 0.85 * st.strength;
       pivot.rotation.x = -maxOpen * eased;
     }
   });
@@ -541,12 +530,25 @@ function Presents({ themeKey, burstControllerRef }) {
 
         const [w, h, d] = it.s;
         const lidTh = Math.max(0.03, h * 0.18);
-
         const emiss = themeKey === "neon" ? 0.55 : 0.14;
 
         return (
-          <group key={idx} position={it.p}>
-            {/* base */}
+          <group
+            key={idx}
+            position={it.p}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              setHovered(true);
+            }}
+            onPointerOut={(e) => {
+              e.stopPropagation();
+              setHovered(false);
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              pendingClickRef.current = idx;
+            }}
+          >
             <mesh>
               <boxGeometry args={[w, h, d]} />
               <meshStandardMaterial
@@ -556,7 +558,6 @@ function Presents({ themeKey, burstControllerRef }) {
               />
             </mesh>
 
-            {/* ribbon cross */}
             <mesh position={[0, h * 0.05, 0]}>
               <boxGeometry args={[w * 1.02, h * 0.18, d * 0.18]} />
               <meshStandardMaterial
@@ -578,7 +579,7 @@ function Presents({ themeKey, burstControllerRef }) {
               />
             </mesh>
 
-            {/* lid: pivot at top-back edge */}
+            {/* lid pivot */}
             <group
               ref={(el) => (lidRef.current[idx] = el)}
               position={[0, h / 2 + lidTh / 2, -d / 2]}
@@ -604,12 +605,17 @@ function Presents({ themeKey, burstControllerRef }) {
 }
 
 /* =========================
-   Santa
+   Santa (click action)
 ========================= */
 
-function Santa({ enabled, themeKey }) {
+function Santa({ enabled, themeKey, burstControllerRef }) {
   const rootRef = useRef(null);
   const armRef = useRef(null);
+
+  const [hovered, setHovered] = useState(false);
+  useCursor(hovered);
+
+  const actionRef = useRef({ requested: false, until: 0 });
 
   const colors = useMemo(() => {
     if (themeKey === "neon") {
@@ -632,6 +638,7 @@ function Santa({ enabled, themeKey }) {
     if (!enabled) return;
     const t = clock.getElapsedTime();
 
+    // orbit
     const r = 1.65;
     const sp = 0.35;
     const ang = t * sp;
@@ -641,13 +648,36 @@ function Santa({ enabled, themeKey }) {
 
     const root = rootRef.current;
     if (root) {
-      root.position.set(x, -0.44 + Math.sin(t * 2.2) * 0.02, z);
-      root.rotation.y = -ang + Math.PI / 2;
+      // click action window
+      if (actionRef.current.requested) {
+        actionRef.current.requested = false;
+        actionRef.current.until = t + 1.2;
+
+        // burst
+        const origin = new THREE.Vector3(x, -0.05, z);
+        burstControllerRef?.current?.fire(
+          origin,
+          themeKey === "neon" ? "#ff46ff" : "#ffd57c"
+        );
+      }
+
+      const active = t < actionRef.current.until;
+      const jump = active ? Math.sin(t * 8.0) * 0.05 : 0;
+
+      root.position.set(x, -0.44 + Math.sin(t * 2.2) * 0.02 + jump, z);
+      root.rotation.y =
+        -ang + Math.PI / 2 + (active ? Math.sin(t * 10.0) * 0.08 : 0);
+      root.scale.setScalar(
+        THREE.MathUtils.lerp(root.scale.x, active ? 1.08 : 1.0, 0.12)
+      );
     }
 
+    // arm wave (bigger when active)
     const arm = armRef.current;
     if (arm) {
-      arm.rotation.z = Math.sin(t * 5.0) * 0.6 + 0.2;
+      const active = t < actionRef.current.until;
+      const amp = active ? 0.95 : 0.6;
+      arm.rotation.z = Math.sin(t * (active ? 7.5 : 5.0)) * amp + 0.2;
       arm.rotation.x = -0.2;
     }
   });
@@ -655,7 +685,21 @@ function Santa({ enabled, themeKey }) {
   if (!enabled) return null;
 
   return (
-    <group ref={rootRef}>
+    <group
+      ref={rootRef}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+      }}
+      onPointerOut={(e) => {
+        e.stopPropagation();
+        setHovered(false);
+      }}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        actionRef.current.requested = true;
+      }}
+    >
       <mesh position={[0, 0.18, 0]}>
         <cylinderGeometry args={[0.14, 0.18, 0.32, 18]} />
         <meshStandardMaterial
@@ -741,25 +785,23 @@ function Santa({ enabled, themeKey }) {
 }
 
 /* =========================
-   Rudolph (head look at tree sometimes)
+   Rudolph (click action + occasional look)
 ========================= */
 
-function Rudolph({ enabled, themeKey }) {
+function Rudolph({ enabled, themeKey, burstControllerRef }) {
   const rootRef = useRef(null);
   const headRef = useRef(null);
   const noseMatRef = useRef(null);
 
-  // look scheduler
-  const lookRef = useRef({
-    next: 0,
-    start: 0,
-    end: 0,
-  });
+  const [hovered, setHovered] = useState(false);
+  useCursor(hovered);
+
+  const clickRef = useRef({ requested: false, until: 0 });
+  const lookRef = useRef({ next: 0, start: 0, end: 0 });
 
   const colors = useMemo(() => {
-    if (themeKey === "neon") {
+    if (themeKey === "neon")
       return { fur: "#7a4dff", horn: "#00ffb4", nose: "#ff46ff" };
-    }
     return { fur: "#8b5a3c", horn: "#d8c7b7", nose: "#ff3b3b" };
   }, [themeKey]);
 
@@ -767,9 +809,16 @@ function Rudolph({ enabled, themeKey }) {
     if (!enabled) return;
     const t = clock.getElapsedTime();
 
-    // orbit
-    const r = 2.25;
-    const sp = 0.28;
+    // click action window (dash + nose super glow)
+    if (clickRef.current.requested) {
+      clickRef.current.requested = false;
+      clickRef.current.until = t + 1.4;
+    }
+    const active = t < clickRef.current.until;
+
+    // orbit (dash when active)
+    const r = active ? 2.55 : 2.25;
+    const sp = active ? 0.55 : 0.28;
     const ang = t * sp + 1.2;
 
     const x = Math.cos(ang) * r;
@@ -780,53 +829,62 @@ function Rudolph({ enabled, themeKey }) {
       root.position.set(x, -0.46 + Math.sin(t * 2.0) * 0.015, z);
       root.rotation.y = -ang + Math.PI / 2;
       root.rotation.x = Math.sin(t * 3.2) * 0.03;
+      root.scale.setScalar(
+        THREE.MathUtils.lerp(root.scale.x, active ? 1.08 : 1.0, 0.12)
+      );
     }
 
-    // nose pulse
+    // nose pulse (+ super glow when active)
     const nm = noseMatRef.current;
     if (nm) {
-      const pulse =
+      const basePulse =
         0.7 +
         0.5 * (0.5 + 0.5 * Math.sin(t * (themeKey === "neon" ? 6.0 : 4.2)));
-      nm.emissiveIntensity = themeKey === "neon" ? 2.2 * pulse : 1.35 * pulse;
+      const boost = active ? 2.2 : 1.0;
+      nm.emissiveIntensity =
+        (themeKey === "neon" ? 2.2 : 1.35) * basePulse * boost;
     }
 
-    // schedule occasional "look at tree"
+    // burst on click start (approx: when active just began -> use t near until)
+    if (active && Math.abs(clickRef.current.until - t - 1.4) < 0.02) {
+      burstControllerRef?.current?.fire(
+        new THREE.Vector3(x, -0.05, z),
+        themeKey === "neon" ? "#00ffb4" : "#ff3b3b"
+      );
+    }
+
+    // occasional "look at tree"
     const lk = lookRef.current;
     if (lk.next === 0) lk.next = t + 2 + Math.random() * 3;
-
     if (t >= lk.next) {
       const dur = 0.9 + Math.random() * 1.2;
       lk.start = t;
       lk.end = t + dur;
-      lk.next = t + 3.0 + Math.random() * 4.5; // next look
+      lk.next = t + 3.0 + Math.random() * 4.5;
     }
 
     const head = headRef.current;
     if (head && root) {
-      const active = t < lk.end;
+      const activeLook = t < lk.end;
       let w = 0;
-
-      if (active) {
+      if (activeLook) {
         const inT = smoothstep(lk.start, lk.start + 0.18, t);
         const outT = 1 - smoothstep(lk.end - 0.18, lk.end, t);
         w = inT * outT;
       }
 
-      // desired yaw to face origin (tree)
-      const originWorld = new THREE.Vector3(0, 0.9, 0);
+      // during click action, force stronger look toward tree
+      if (active) w = Math.max(w, 0.8);
 
-      // head world position approx: root local + head local
+      const originWorld = new THREE.Vector3(0, 0.9, 0);
       const headWorld = new THREE.Vector3();
       head.getWorldPosition(headWorld);
 
       const dirWorld = originWorld.clone().sub(headWorld).normalize();
-
-      // convert world direction into root local space
       const invRootQ = root.getWorldQuaternion(new THREE.Quaternion()).invert();
       const dirLocal = dirWorld.clone().applyQuaternion(invRootQ);
 
-      const desiredYaw = Math.atan2(dirLocal.x, dirLocal.z); // yaw around y
+      const desiredYaw = Math.atan2(dirLocal.x, dirLocal.z);
       const desiredPitch = -Math.atan2(
         dirLocal.y,
         Math.sqrt(dirLocal.x * dirLocal.x + dirLocal.z * dirLocal.z)
@@ -835,7 +893,6 @@ function Rudolph({ enabled, themeKey }) {
       const yaw = THREE.MathUtils.clamp(desiredYaw, -0.9, 0.9);
       const pitch = THREE.MathUtils.clamp(desiredPitch, -0.35, 0.25);
 
-      // baseline subtle head motion
       const baseYaw = Math.sin(t * 2.2) * 0.05;
       const basePitch = Math.sin(t * 1.9) * 0.03;
 
@@ -854,7 +911,21 @@ function Rudolph({ enabled, themeKey }) {
   if (!enabled) return null;
 
   return (
-    <group ref={rootRef}>
+    <group
+      ref={rootRef}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+      }}
+      onPointerOut={(e) => {
+        e.stopPropagation();
+        setHovered(false);
+      }}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        clickRef.current.requested = true;
+      }}
+    >
       {/* body */}
       <mesh position={[0, 0.18, 0]}>
         <sphereGeometry args={[0.18, 18, 18]} />
@@ -864,8 +935,6 @@ function Rudolph({ enabled, themeKey }) {
           metalness={0.05}
         />
       </mesh>
-
-      {/* back */}
       <mesh position={[-0.18, 0.18, 0]}>
         <sphereGeometry args={[0.14, 18, 18]} />
         <meshStandardMaterial
@@ -892,9 +961,8 @@ function Rudolph({ enabled, themeKey }) {
         </mesh>
       ))}
 
-      {/* head group (look animation applied here) */}
+      {/* head group */}
       <group ref={headRef} position={[0.28, 0.34, 0]}>
-        {/* neck */}
         <mesh position={[-0.06, -0.08, 0]}>
           <sphereGeometry args={[0.11, 18, 18]} />
           <meshStandardMaterial
@@ -904,7 +972,6 @@ function Rudolph({ enabled, themeKey }) {
           />
         </mesh>
 
-        {/* head */}
         <mesh position={[0.08, -0.02, 0]}>
           <sphereGeometry args={[0.12, 18, 18]} />
           <meshStandardMaterial
@@ -914,7 +981,6 @@ function Rudolph({ enabled, themeKey }) {
           />
         </mesh>
 
-        {/* nose (emissive) */}
         <mesh position={[0.22, -0.04, 0]}>
           <sphereGeometry args={[0.04, 16, 16]} />
           <meshStandardMaterial
@@ -927,7 +993,6 @@ function Rudolph({ enabled, themeKey }) {
           />
         </mesh>
 
-        {/* horns */}
         <group position={[0.05, 0.13, 0]}>
           <mesh rotation={[0, 0, 0.25]} position={[0.02, 0, 0.06]}>
             <coneGeometry args={[0.035, 0.18, 10]} />
@@ -952,7 +1017,6 @@ function Rudolph({ enabled, themeKey }) {
         </group>
       </group>
 
-      {/* tail */}
       <mesh position={[-0.32, 0.28, 0]}>
         <sphereGeometry args={[0.05, 14, 14]} />
         <meshStandardMaterial
@@ -968,7 +1032,7 @@ function Rudolph({ enabled, themeKey }) {
 }
 
 /* =========================
-   Tree (wind + ornaments + lights)
+   Tree
 ========================= */
 
 function TreeModel({ themeKey, tokens, seed, ornamentCount }) {
@@ -1083,7 +1147,7 @@ function TreeModel({ themeKey, tokens, seed, ornamentCount }) {
 }
 
 /* =========================
-   Camera rig (preset, no text)
+   Camera rig
 ========================= */
 
 function CameraRig({
@@ -1134,7 +1198,7 @@ function CameraRig({
 }
 
 /* =========================
-   Main Component
+   Main
 ========================= */
 
 export default function ChristmasTree3D() {
@@ -1155,7 +1219,6 @@ export default function ChristmasTree3D() {
 
   const controlsRef = useRef(null);
   const dragLockRef = useRef(false);
-
   const burstControllerRef = useRef(null);
 
   useEffect(() => {
@@ -1296,13 +1359,11 @@ export default function ChristmasTree3D() {
               scale={[8, 4.5, 8]}
             />
 
-            {/* snow */}
             <Snowfall
               enabled={showSnow && (theme === "snow" || theme === "minimal")}
               count={theme === "snow" ? 1400 : 950}
             />
 
-            {/* tree */}
             <TreeModel
               themeKey={theme}
               tokens={tokens}
@@ -1310,7 +1371,7 @@ export default function ChristmasTree3D() {
               ornamentCount={ornamentCount}
             />
 
-            {/* gift burst particles controller */}
+            {/* click/auto events burst */}
             <BurstParticles
               tokens={tokens}
               themeKey={theme}
@@ -1318,7 +1379,6 @@ export default function ChristmasTree3D() {
               count={96}
             />
 
-            {/* presents with lid event */}
             {showPresents && (
               <Presents
                 themeKey={theme}
@@ -1326,11 +1386,21 @@ export default function ChristmasTree3D() {
               />
             )}
 
-            {/* characters */}
-            <Santa enabled={showSanta} themeKey={theme} />
-            <Rudolph enabled={showRudolph} themeKey={theme} />
+            {showSanta && (
+              <Santa
+                enabled={showSanta}
+                themeKey={theme}
+                burstControllerRef={burstControllerRef}
+              />
+            )}
+            {showRudolph && (
+              <Rudolph
+                enabled={showRudolph}
+                themeKey={theme}
+                burstControllerRef={burstControllerRef}
+              />
+            )}
 
-            {/* camera preset */}
             <CameraRig
               themeKey={theme}
               controlsRef={controlsRef}
