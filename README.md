@@ -3,6 +3,12 @@
 React Three Fiber로 구현한 3D 크리스마스 트리 씬입니다.  
 바람에 흔들리는 트리, 테마별 카메라 프리셋, 네온 체이스 조명, 루돌프/선물 이벤트를 포함합니다.
 
+## Screenshots
+
+| Neon Theme                      | Snow Theme                      |
+| ------------------------------- | ------------------------------- |
+| ![Neon Theme](assets/tree2.png) | ![Snow Theme](assets/tree1.png) |
+
 ## Features
 
 - Wind sway: 트리의 미세한 흔들림 애니메이션
